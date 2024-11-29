@@ -1,0 +1,11 @@
+[Unit]
+Description=tvplayer
+After=network.target
+
+[Service]
+WorkingDirectory=/home/sysop/small_retro_tv/
+ExecStart=/usr/bin/python /home/sysop/small_retro_tv/retrotv.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

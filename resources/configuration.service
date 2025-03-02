@@ -1,11 +1,11 @@
 [Unit]
-Description=tvplayer service
+Description=tvplayer configuration
 After=network.target graphical.target
 Requires=graphical.target
 
 [Service]
 WorkingDirectory=/home/retrotv/small_retro_tv/
-ExecStart=/usr/bin/python /home/retrotv/small_retro_tv/retrotv.py
+ExecStart=/usr/bin/python /home/retrotv/small_retro_tv/configuration.py
 User=retrotv
 Group=retrotv
 Restart=always

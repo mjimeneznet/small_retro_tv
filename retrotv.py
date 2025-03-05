@@ -12,14 +12,7 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 # Configuration
-VIDEO_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'videos')
-VIDEO_EXTENSIONS = ('.avi', '.mov', '.mp4', '.mkv')
 CONFIG_FLAG_FILE = '/tmp/pi_config_mode'  # Temporary control file
-
-def get_videos(directory):
-    # Return the video directory with wildcard for all supported video types
-    wildcards = [f"{directory}/**/*{ext}" for ext in VIDEO_EXTENSIONS]
-    return wildcards
 
 def check_config_mode():
     """Check if button is pressed at startup"""
@@ -28,19 +21,19 @@ def check_config_mode():
 def run_config_mode():
     """Handle configuration mode and reboot"""
     print("CONFIGURATION MODE ACTIVE")
-    
+
     # Create control file
     with open(CONFIG_FLAG_FILE, 'w') as f:
         f.write('1')
-    
+
     try:
         # Wait for button release
         while GPIO.input(GPIO_PIN) == GPIO.LOW:
             time.sleep(0.1)
-        
+
         # Configuration logic here
         print("Configuration complete. Rebooting...")
-        
+
     finally:
         # Cleanup and reboot
         if os.path.exists(CONFIG_FLAG_FILE):
@@ -48,11 +41,11 @@ def run_config_mode():
         GPIO.cleanup()
         subprocess.call('sudo reboot', shell=True)
 
-def play_video(video_paths):
+def play_video():
     try:
-        cmd = ['cvlc', '-q', '--gain', '0.75', '--audio-filter=downmix', 
+        cmd = ['cvlc', '-q', '--gain', '0.75', '--audio-filter=downmix',
                '--fullscreen', '--no-osd', '--aspect-ratio=fill',
-               '--random', '--loop'] + video_paths
+               '--random', 'videos/']
         return Popen(cmd)
     except Exception as e:
         print(f"Playback error: {e}")
@@ -71,24 +64,23 @@ def screen_power(state):
 
 def normal_operation():
     """Main video playback logic"""
-    videos = get_videos(VIDEO_DIR)
     current_process = None
     screen_state = False
-    
+
     # Ensure screen is off at startup
     screen_power(False)
 
     try:
         while True:
             btn_state = GPIO.input(GPIO_PIN) == GPIO.LOW
-            
+
             if btn_state and not screen_state:
                 # Start playback
                 screen_state = True
-                current_process = play_video(videos)
+                current_process = play_video()
                 time.sleep(1.5)
                 screen_power(True)
-                
+
             elif not btn_state and screen_state:
                 # Stop playback
                 screen_state = False
@@ -114,4 +106,3 @@ if __name__ == "__main__":
         run_config_mode()
     else:
         normal_operation()
-

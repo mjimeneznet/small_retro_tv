@@ -17,8 +17,9 @@ VIDEO_EXTENSIONS = ('.avi', '.mov', '.mp4', '.mkv')
 CONFIG_FLAG_FILE = '/tmp/pi_config_mode'  # Temporary control file
 
 def get_videos(directory):
-    return [os.path.join(root, f) for root, _, files in os.walk(directory)
-            for f in files if f.lower().endswith(VIDEO_EXTENSIONS)]
+    # Return the video directory with wildcard for all supported video types
+    wildcards = [f"{directory}/**/*{ext}" for ext in VIDEO_EXTENSIONS]
+    return wildcards
 
 def check_config_mode():
     """Check if button is pressed at startup"""
@@ -47,10 +48,12 @@ def run_config_mode():
         GPIO.cleanup()
         subprocess.call('sudo reboot', shell=True)
 
-def play_video(video):
+def play_video(video_paths):
     try:
-        return Popen(['cvlc', '-q', '--gain', '0.75', '--audio-filter=downmix', 
-                     '--fullscreen', '--no-osd', '--aspect-ratio=fill', video])
+        cmd = ['cvlc', '-q', '--gain', '0.75', '--audio-filter=downmix', 
+               '--fullscreen', '--no-osd', '--aspect-ratio=fill',
+               '--random', '--loop'] + video_paths
+        return Popen(cmd)
     except Exception as e:
         print(f"Playback error: {e}")
         return None
@@ -82,14 +85,9 @@ def normal_operation():
             if btn_state and not screen_state:
                 # Start playback
                 screen_state = True
-                current_process = play_video(random.choice(videos))
+                current_process = play_video(videos)
                 time.sleep(1.5)
                 screen_power(True)
-            
-            elif btn_state and screen_state:
-                # Check if current video has finished and start next one
-                if current_process and current_process.poll() is not None:
-                    current_process = play_video(random.choice(videos))
                 
             elif not btn_state and screen_state:
                 # Stop playback

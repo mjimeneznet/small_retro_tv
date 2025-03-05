@@ -8,7 +8,7 @@ WorkingDirectory=/home/retrotv/small_retro_tv/
 ExecStart=/usr/bin/python /home/retrotv/small_retro_tv/configuration.py
 User=retrotv
 Group=retrotv
-Restart=always
+Restart=no
 RestartSec=10
 
 [Install]

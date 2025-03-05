@@ -71,6 +71,9 @@ def normal_operation():
     videos = get_videos(VIDEO_DIR)
     current_process = None
     screen_state = False
+    
+    # Ensure screen is off at startup
+    screen_power(False)
 
     try:
         while True:
@@ -79,8 +82,14 @@ def normal_operation():
             if btn_state and not screen_state:
                 # Start playback
                 screen_state = True
-                screen_power(True)
                 current_process = play_video(random.choice(videos))
+                time.sleep(1.5)
+                screen_power(True)
+            
+            elif btn_state and screen_state:
+                # Check if current video has finished and start next one
+                if current_process and current_process.poll() is not None:
+                    current_process = play_video(random.choice(videos))
                 
             elif not btn_state and screen_state:
                 # Stop playback

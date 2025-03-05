@@ -1,8 +1,6 @@
 [Unit]
 Description=tvplayer service
-After=network.target graphical.target
-Requires=graphical.target
-Wants=multi-user.target
+After=network.target
 
 [Service]
 WorkingDirectory=/home/retrotv/small_retro_tv/
@@ -11,8 +9,6 @@ User=retrotv
 Group=retrotv
 Restart=always
 RestartSec=10
-Type=simple
 
 [Install]
 WantedBy=multi-user.target
-DefaultInstance=1

@@ -32,6 +32,8 @@ def run_config_mode():
             time.sleep(0.1)
 
         # Configuration logic here
+        subprocess.call('sudo systemctl enable configuration', shell=True)
+        subprocess.call('sudo systemctl start configuration', shell=True)
         print("Configuration complete. Rebooting...")
 
     finally:
@@ -39,7 +41,8 @@ def run_config_mode():
         if os.path.exists(CONFIG_FLAG_FILE):
             os.remove(CONFIG_FLAG_FILE)
         GPIO.cleanup()
-        subprocess.call('sudo reboot', shell=True)
+        subprocess.call('sudo systemctl stop configuration', shell=True)
+        subprocess.call('sudo systemctl disable configuration', shell=True)
 
 def play_video():
     try:

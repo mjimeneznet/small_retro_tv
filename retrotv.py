@@ -31,24 +31,32 @@ def run_config_mode():
         while GPIO.input(GPIO_PIN) == GPIO.LOW:
             time.sleep(0.1)
 
-        # Configuration logic here
-        subprocess.call('sudo systemctl enable configuration', shell=True)
-        subprocess.call('sudo systemctl start configuration', shell=True)
+        # Turn on screen for configuration
+        screen_power(True)
+        time.sleep(1)  # Give screen time to wake up
+
+        # Run the configuration script
+        config_script = os.path.join(os.path.dirname(__file__), 'configuration.py')
+        subprocess.call(['python3', config_script])
+
         print("Configuration complete. Rebooting...")
+        time.sleep(2)  # Give time for message to be visible
+
+        # Turn off screen before reboot
+        screen_power(False)
+        #subprocess.call(['sudo', 'reboot'])
 
     finally:
-        # Cleanup and reboot
+        # Cleanup
         if os.path.exists(CONFIG_FLAG_FILE):
             os.remove(CONFIG_FLAG_FILE)
         GPIO.cleanup()
-        subprocess.call('sudo systemctl stop configuration', shell=True)
-        subprocess.call('sudo systemctl disable configuration', shell=True)
 
 def play_video():
     try:
         cmd = ['cvlc', '-q', '--gain', '0.75', '--audio-filter=downmix',
                '--fullscreen', '--no-osd', '--aspect-ratio=fill',
-               '--random', 'videos/']
+               '--random', '--loop', 'videos/']
         return Popen(cmd)
     except Exception as e:
         print(f"Playback error: {e}")

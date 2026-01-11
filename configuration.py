@@ -4,8 +4,11 @@ import os
 import random
 import subprocess
 import shlex
+import threading
+import time
 from flask import Flask, request, jsonify, render_template_string
 from PIL import Image, ImageDraw, ImageFont
+from RPi import GPIO
 
 app = Flask(__name__)
 
@@ -14,98 +17,71 @@ HOTSPOT_SSID = "RetroTV"
 HOTSPOT_PASSWORD = "RetroTV123"
 WPA_FILE = "/etc/wpa_supplicant/wpa_supplicant.conf"
 IMAGE_SIZE = (480, 640)  # Width x Height
+GPIO_PIN = 26  # Same pin as retrotv.py
+
+# GPIO setup
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 
 def create_hotspot_info_image():
-    """Generate retro TV-style PNG with precise formatting"""
-    BORDER_WIDTH = 15
-
+    """Generate simple centered text display"""
+    
     def get_hotspot_ip():
         try:
             return subprocess.check_output(['hostname', '-I'], text=True).split()[0]
         except:
             return "169.254.0.21"
 
-    # Create base image with dark green background
-    img = Image.new('RGB', IMAGE_SIZE, color=(0, 30, 0))
+    # Create base image with black background
+    img = Image.new('RGB', IMAGE_SIZE, color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Add CRT noise within borders
-    for _ in range(4000):
-        x = random.randint(BORDER_WIDTH, IMAGE_SIZE[0]-BORDER_WIDTH-1)
-        y = random.randint(BORDER_WIDTH, IMAGE_SIZE[1]-BORDER_WIDTH-1)
-        img.putpixel((x, y), (0, random.randint(50, 100), 0))
+    # Add subtle CRT noise effect
+    for _ in range(3000):
+        x = random.randint(0, IMAGE_SIZE[0]-1)
+        y = random.randint(0, IMAGE_SIZE[1]-1)
+        img.putpixel((x, y), (0, random.randint(20, 60), 0))
 
-    # Load monospace font with size validation
+    # Load monospace font
     try:
-        font = ImageFont.truetype("DejaVuSansMono.ttf", 34)  # Reduced from 36
-        char_width = font.getlength("M")  # Get exact monospace width
+        font = ImageFont.truetype("DejaVuSansMono.ttf", 40)
     except:
         font = ImageFont.load_default()
-        char_width = 12  # Fallback approximation
 
-    # Calculate box width based on available space
-    available_width = IMAGE_SIZE[0] - 2*BORDER_WIDTH - 20  # 20px padding
-    box_chars = min(int(available_width / char_width), 34)
-    box_width = box_chars
+    # Create simple text without box decorations
+    ip = get_hotspot_ip()
+    text = f"""SSID: {HOTSPOT_SSID}
+PASS: {HOTSPOT_PASSWORD}
+IP: {ip}"""
 
-    # Format ASCII box with exact spacing
-    def format_ascii_box():
-        ip = get_hotspot_ip()
-        return f"""╔{'═'*(box_width-2)}╗
-║ SSID: {HOTSPOT_SSID.ljust(box_width-10)} ║
-║ PASS: {HOTSPOT_PASSWORD.ljust(box_width-10)} ║
-║ IP: {ip.ljust(box_width-8)} ║
-╚{'═'*(box_width-2)}╝"""
-
-    text = format_ascii_box()
-
-    # Get precise text dimensions
+    # Get text dimensions for centering
     bbox = draw.multiline_textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
     text_x = (IMAGE_SIZE[0] - text_width) // 2
-    text_y = (IMAGE_SIZE[1] - text_height) // 2 - 50
+    text_y = (IMAGE_SIZE[1] - text_height) // 2 - 110  # Moved up 2 lines
 
-    # Draw green border
-    draw.rectangle(
-        [(BORDER_WIDTH, BORDER_WIDTH), 
-         (IMAGE_SIZE[0]-BORDER_WIDTH, IMAGE_SIZE[1]-BORDER_WIDTH)],
-        outline=(0, 255, 0),
-        width=BORDER_WIDTH
-    )
-
-    # Draw text with shadow
-    for dx, dy in [(-1,-1), (1,1), (-1,1), (1,-1)]:
+    # Draw text with subtle shadow for depth
+    for dx, dy in [(2, 2)]:
         draw.multiline_text(
             (text_x + dx, text_y + dy),
             text,
-            fill=(0, 80, 0),
+            fill=(0, 100, 0),
             font=font,
-            align='center',
-            spacing=10
+            align='left',
+            spacing=15
         )
     
+    # Draw main text in bright green
     draw.multiline_text(
         (text_x, text_y),
         text,
         fill=(0, 255, 0),
         font=font,
-        align='center',
-        spacing=10
+        align='left',
+        spacing=15
     )
-
-    # Draw scanlines avoiding text area
-    scanline_start = BORDER_WIDTH
-    scanline_end = IMAGE_SIZE[0] - BORDER_WIDTH 
-    text_bottom = text_y + text_height + BORDER_WIDTH + 15 
-    
-    for y in range(BORDER_WIDTH, IMAGE_SIZE[1]-BORDER_WIDTH, 20):
-        if y < text_y - BORDER_WIDTH or y > text_bottom:
-            draw.line(
-                [(scanline_start, y+75), (scanline_end, y-75)],
-                fill=(0, 60, 0)
-            )
 
     output_file = "/tmp/retrotv_config.png"
     img.save(output_file)
@@ -345,17 +321,57 @@ def handle_configure():
     write_wpa_config(data['ssid'], data['password'])
     #subprocess.run(["sudo", "reboot"])
     return "", 200
-if __name__ == "__main__":
-    # Grant temporary sudo for port 80
-    #subprocess.run(["sudo", "setcap", "cap_net_bind_service=+ep", "/usr/bin/python3"])
+def monitor_button_for_reboot(display_proc):
+	"""Monitor GPIO button and reboot when released"""
+	print("🔘 Monitoring button... Release to reboot")
+	
+	# Wait while button is pressed
+	while GPIO.input(GPIO_PIN) == GPIO.LOW:
+		time.sleep(0.1)
+	
+	print("✅ Button released! Rebooting in 2 seconds...")
+	time.sleep(2)
+	
+	# Cleanup
+	if display_proc:
+		display_proc.terminate()
+	GPIO.cleanup()
+	
+	# Turn off screen before reboot
+	subprocess.call('vcgencmd display_power 0', shell=True)
+	
+	# Reboot
+	subprocess.call(['sudo', 'reboot'])
 
-    try:
-        create_hotspot()
-        display_proc = display_image()  # Start image display
-        app.run(host='0.0.0.0', port=80)
-    finally:
-        # Cleanup processes
-        if 'display_proc' in locals():
-            display_proc.terminate()
-        #subprocess.run(["sudo", "setcap", "cap_net_bind_service=-ep", "/usr/bin/python3"])
+if __name__ == "__main__":
+	display_proc = None
+	
+	try:
+		print("🌐 Creating WiFi hotspot...")
+		create_hotspot()
+		
+		print("📺 Displaying configuration info...")
+		display_proc = display_image()
+		
+		# Run Flask in a separate thread (daemon so it dies when main exits)
+		flask_thread = threading.Thread(
+			target=lambda: app.run(host='0.0.0.0', port=80, debug=False, use_reloader=False),
+			daemon=True
+		)
+		flask_thread.start()
+		
+		print("🌍 Web interface available at http://10.42.0.1")
+		
+		# Main thread monitors button for reboot
+		monitor_button_for_reboot(display_proc)
+		
+	except KeyboardInterrupt:
+		print("\n⚠️ Interrupted by user")
+	except Exception as e:
+		print(f"❌ Error: {e}")
+	finally:
+		# Cleanup processes
+		if display_proc:
+			display_proc.terminate()
+		GPIO.cleanup()
 

@@ -22,6 +22,13 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv'}
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 
+# Global state for streaming
+streaming_state = {
+	'active': False,
+	'process': None,
+	'url': None
+}
+
 def allowed_file(filename):
 	"""Check if file extension is allowed"""
 	return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -342,6 +349,25 @@ button:hover {
 	<div class="container">
 		<h1>📺 RetroTV - Gestión de Videos</h1>
 		
+		<!-- Streaming Section -->
+		<div class="upload-section" style="border: 2px solid #00f; box-shadow: 0 0 15px #00f;">
+			<h2 style="margin-top:0; color:#00f; text-shadow: 0 0 10px #00f;">🌐 Reproducir desde URL (YouTube, etc.)</h2>
+			<p style="color:#00a; font-size:0.9em; margin:10px 0;">
+				🎬 Reproduce videos directamente desde URL (YouTube, Vimeo, etc.) - Se detendrá la reproducción local
+			</p>
+			<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+				<input type="url" id="streamUrl" placeholder="https://www.youtube.com/watch?v=..." 
+					style="flex: 1; min-width: 250px; background:#001; color:#00f; border:1px solid #00f;">
+				<button onclick="startStream()" style="background:#003; border-color:#00f; color:#00f;">
+					▶️ Reproducir
+				</button>
+				<button onclick="stopStream()" style="background:#300; border-color:#f00; color:#f00;">
+					⏹️ Detener Stream
+				</button>
+			</div>
+			<div id="streamStatus" style="margin-top:10px; padding:10px; display:none; border-radius:3px;"></div>
+		</div>
+		
 		<div class="upload-section">
 			<h2 style="margin-top:0; color:#0f0;">📤 Subir Nuevo Video</h2>
 			<p style="color:#0a0; font-size:0.9em; margin:10px 0;">
@@ -463,6 +489,97 @@ button:hover {
 		status.className = 'status ' + type;
 		status.style.display = 'block';
 	}
+
+	// Streaming functions
+	async function startStream() {
+		const url = document.getElementById('streamUrl').value;
+		const streamStatus = document.getElementById('streamStatus');
+		
+		if (!url) {
+			showStreamStatus('❌ Por favor ingresa una URL', 'error');
+			return;
+		}
+
+		try {
+			showStreamStatus('⏳ Iniciando stream...', 'success');
+			
+			const response = await fetch('/start-stream', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({ url: url })
+			});
+
+			if (response.ok) {
+				showStreamStatus('✅ Stream iniciado: ' + url, 'success');
+				document.getElementById('streamUrl').value = '';
+			} else {
+				const error = await response.text();
+				showStreamStatus('❌ Error al iniciar stream: ' + error, 'error');
+			}
+		} catch (err) {
+			showStreamStatus('❌ Error: ' + err.message, 'error');
+		}
+	}
+
+	async function stopStream() {
+		const streamStatus = document.getElementById('streamStatus');
+		
+		try {
+			showStreamStatus('⏳ Deteniendo stream...', 'success');
+			
+			const response = await fetch('/stop-stream', {
+				method: 'POST'
+			});
+
+			if (response.ok) {
+				showStreamStatus('✅ Stream detenido - Volviendo a reproducción local', 'success');
+				setTimeout(() => {
+					streamStatus.style.display = 'none';
+				}, 3000);
+			} else {
+				showStreamStatus('❌ Error al detener stream', 'error');
+			}
+		} catch (err) {
+			showStreamStatus('❌ Error: ' + err.message, 'error');
+		}
+	}
+
+	function showStreamStatus(message, type) {
+		const streamStatus = document.getElementById('streamStatus');
+		streamStatus.textContent = message;
+		streamStatus.className = type;
+		streamStatus.style.display = 'block';
+		
+		if (type === 'success') {
+			streamStatus.style.background = '#003300';
+			streamStatus.style.border = '1px solid #0f0';
+			streamStatus.style.color = '#0f0';
+		} else {
+			streamStatus.style.background = '#330000';
+			streamStatus.style.border = '1px solid #f00';
+			streamStatus.style.color = '#f00';
+		}
+	}
+
+	// Check stream status on load
+	async function checkStreamStatus() {
+		try {
+			const response = await fetch('/stream-status');
+			const data = await response.json();
+			
+			if (data.active) {
+				showStreamStatus('🌐 Stream activo: ' + data.url, 'success');
+			}
+		} catch (err) {
+			console.log('Could not check stream status');
+		}
+	}
+
+	// Check status when page loads
+	checkStreamStatus();
+	
+	// Refresh status every 10 seconds
+	setInterval(checkStreamStatus, 10000);
 	</script>
 </body>
 </html>
@@ -517,6 +634,63 @@ def delete_file(filename):
 	except Exception as e:
 		return f'Delete failed: {str(e)}', 500
 
+@app.route('/start-stream', methods=['POST'])
+def start_stream():
+	"""Start streaming from URL"""
+	global streaming_state
+	
+	try:
+		data = request.json
+		url = data.get('url')
+		
+		if not url:
+			return 'No URL provided', 400
+		
+		# Stop any existing stream
+		stop_stream()
+		
+		# Start new stream in background
+		streaming_state['url'] = url
+		streaming_state['active'] = True
+		
+		# Start stream in background thread
+		def stream_worker():
+			global streaming_state
+			process = play_stream(url)
+			streaming_state['process'] = process
+			
+			if process:
+				# Wait for stream to finish
+				process.wait()
+				print("📺 Stream finished, stopped")
+				streaming_state['active'] = False
+				streaming_state['process'] = None
+				streaming_state['url'] = None
+		
+		threading.Thread(target=stream_worker, daemon=True).start()
+		
+		return 'Stream started', 200
+	except Exception as e:
+		print(f"❌ Start stream error: {e}")
+		return f'Failed to start stream: {str(e)}', 500
+
+@app.route('/stop-stream', methods=['POST'])
+def stop_stream_route():
+	"""Stop current stream"""
+	try:
+		stop_stream()
+		return 'Stream stopped', 200
+	except Exception as e:
+		return f'Failed to stop stream: {str(e)}', 500
+
+@app.route('/stream-status', methods=['GET'])
+def stream_status():
+	"""Get current streaming status"""
+	return jsonify({
+		'active': streaming_state['active'],
+		'url': streaming_state['url']
+	})
+
 def check_config_mode():
     """Check if button is pressed at startup"""
     return GPIO.input(GPIO_PIN) == GPIO.LOW
@@ -564,6 +738,60 @@ def stop_video(process):
         except subprocess.TimeoutExpired:
             process.kill()
 
+def play_stream(url):
+	"""Play video from URL using yt-dlp + cvlc"""
+	try:
+		print(f"🌐 Starting stream from: {url}")
+		
+		# Get direct URL using yt-dlp
+		result = subprocess.run([
+			'yt-dlp',
+			'-f', 'best[height<=480]/best',
+			'-g',
+			url
+		], capture_output=True, text=True, check=True)
+		
+		direct_url = result.stdout.strip()
+		
+		if not direct_url:
+			print(f"❌ Could not get stream URL")
+			return None
+		
+		print(f"✅ Got stream URL, starting playback...")
+		
+		# Play with VLC
+		cmd = [
+			'cvlc', '-q',
+			'--gain', '0.75',
+			'--audio-filter=downmix',
+			'--fullscreen',
+			'--no-osd',
+			direct_url
+		]
+		
+		process = Popen(cmd)
+		print(f"▶️ Stream playing (PID: {process.pid})")
+		return process
+		
+	except subprocess.CalledProcessError as e:
+		print(f"❌ yt-dlp error: {e.stderr}")
+		return None
+	except Exception as e:
+		print(f"❌ Stream playback error: {e}")
+		return None
+
+def stop_stream():
+	"""Stop current stream and return to normal playback"""
+	global streaming_state
+	
+	if streaming_state['active'] and streaming_state['process']:
+		print(f"⏹️ Stopping stream: {streaming_state['url']}")
+		stop_video(streaming_state['process'])
+		streaming_state['active'] = False
+		streaming_state['process'] = None
+		streaming_state['url'] = None
+		print("✅ Stream stopped, returning to normal playback")
+
 def screen_power(state):
     subprocess.call(f'vcgencmd display_power {"1" if state else "0"}', shell=True)
 
@@ -579,6 +807,7 @@ def normal_operation():
     video_count = count_videos()
     last_check_time = time.time()
     CHECK_INTERVAL = 5  # Check for new videos every 5 seconds
+    was_streaming = False  # Track if we were streaming before
 
     # Ensure screen is off at startup
     screen_power(False)
@@ -594,7 +823,42 @@ def normal_operation():
             btn_state = GPIO.input(GPIO_PIN) == GPIO.LOW
             current_time = time.time()
 
-            # Check if video list has changed
+            # Check if streaming is active
+            if streaming_state['active']:
+                # If streaming, stop local playback but keep screen on
+                if current_process:
+                    stop_video(current_process)
+                    current_process = None
+                
+                # Ensure screen is on for streaming
+                if not screen_state:
+                    screen_power(True)
+                    screen_state = True
+                    print("📺 Screen on for streaming")
+                
+                was_streaming = True
+                time.sleep(0.5)
+                continue
+            
+            # If we just finished streaming and button is pressed, resume local playback
+            if was_streaming and btn_state:
+                print("🔄 Stream finished, resuming local playback...")
+                was_streaming = False
+                screen_state = True
+                current_process = play_video()
+                time.sleep(1.5)
+                screen_power(True)
+                print(f"▶️ Local playback resumed ({video_count} videos)")
+                continue
+            elif was_streaming and not btn_state:
+                # Stream finished but button not pressed, just turn off screen
+                was_streaming = False
+                screen_power(False)
+                screen_state = False
+                print("📺 Stream finished, screen off")
+                continue
+
+            # Check if video list has changed (only when not streaming)
             if current_time - last_check_time >= CHECK_INTERVAL:
                 new_count = count_videos()
                 if new_count != video_count:

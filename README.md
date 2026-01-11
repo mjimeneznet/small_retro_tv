@@ -8,6 +8,8 @@ This project is a modern take on the classic CRT TV, inspired by the [Simpsons T
 - 🌐 Video management UI (upload, delete, view videos)
 - 📏 Automatic video scaling to 480px height
 - 🔘 Physical button control (on/off and config mode)
+- 🌐 Stream videos directly from URLs (YouTube, Vimeo, etc.) using yt-dlp
+- 🔄 Automatic resume to local playback when stream ends
 
 ![Retro TV](./images/retro_tv.jpg)
 
@@ -80,6 +82,15 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
   ```bash
   sudo apt install -y vlc python3-flask python3-rpi.gpio python3-pip ffmpeg
   ```
+- Install yt-dlp (for streaming from URLs):
+  ```bash
+  # Download standalone binary (recommended, no Python version conflicts)
+  sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l -O /usr/local/bin/yt-dlp
+  sudo chmod +x /usr/local/bin/yt-dlp
+  
+  # Alternative: install via apt (older version)
+  # sudo apt install -y yt-dlp
+  ```
 - Clone this repository:
   ```bash
   cd ~
@@ -145,9 +156,15 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
 1. **Press the button** → TV turns on and starts playing random videos
 2. **Release the button** → TV turns off
 3. **Access web interface** → Open `http://<raspberry-pi-ip>` in your browser to:
-   - Upload new videos (automatically scaled to 480px height)
-   - Delete videos
-   - View video list with size and duration
+   - **Stream from URL** (YouTube, Vimeo, etc.):
+     * Paste any video URL in the blue section
+     * Click "▶️ Reproducir" to start streaming
+     * Video plays immediately at max 480p quality
+     * Click "⏹️ Detener Stream" to stop and return to local videos
+     * Stream auto-resumes local playback when finished
+   - **Upload new videos** (automatically scaled to 480px height)
+   - **Delete videos** from your library
+   - **View video list** with size and duration info
 
 ### Configuration Mode (WiFi Setup)
 1. **Hold the button while powering on** the Raspberry Pi
@@ -163,6 +180,29 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
 ## 🎉 Enjoy Your Retro TV!
 Your retro TV is now ready to play random TV shows! The videos are automatically detected and reloaded every 5 seconds when changes are made through the web interface.
 
+## 💡 Usage Examples
+
+### Streaming from YouTube
+1. Find a video on YouTube (e.g., classic cartoons, old TV shows)
+2. Copy the URL: `https://www.youtube.com/watch?v=VIDEO_ID`
+3. Open the web interface: `http://<raspberry-pi-ip>`
+4. Paste the URL in the blue "Reproducir desde URL" section
+5. Click "▶️ Reproducir"
+6. The video plays immediately on your RetroTV
+
+### Supported Streaming Sites
+Thanks to yt-dlp, you can stream from 1000+ websites including:
+- **YouTube** - `https://www.youtube.com/watch?v=...`
+- **Vimeo** - `https://vimeo.com/...`
+- **Dailymotion** - `https://www.dailymotion.com/video/...`
+- **Twitch** (VODs) - `https://www.twitch.tv/videos/...`
+- And many more! See [full list](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)
+
+### Managing Local Videos
+1. **Upload**: Click "Subir Nuevo Video" → Select file → Automatic conversion to 480p MP4
+2. **Delete**: Click 🗑️ next to any video to remove it
+3. **Auto-reload**: New videos are detected within 5 seconds during playback
+
 ## 📋 Technical Details
 
 ### Video Processing
@@ -171,17 +211,33 @@ Your retro TV is now ready to play random TV shows! The videos are automatically
 - **Optimization**: Videos are optimized for Raspberry Pi playback with `libx264` codec
 - **Supported formats**: MP4, AVI, MKV, MOV, WebM, FLV, WMV
 
+### URL Streaming
+- **yt-dlp integration**: Extracts direct video URLs from YouTube, Vimeo, and 1000+ sites
+- **Automatic quality selection**: Streams at max 480p (optimal for display)
+- **No storage required**: Direct streaming without downloading
+- **Smart resume**: Auto-returns to local playback when stream ends
+- **Command used**: `yt-dlp -f "best[height<=480]/best" -g URL | cvlc ...`
+
 ### System Architecture
 - **Python 3** with Flask web framework
 - **VLC (cvlc)** for video playback with random loop mode
+- **yt-dlp** for URL streaming and video extraction
 - **FFmpeg/FFprobe** for video processing and metadata extraction
 - **GPIO control** via RPi.GPIO library
 - **Background monitoring** for automatic video list updates
+- **Threaded streaming** for non-blocking URL playback
 
 ### Network Services
 - **Port 80** (HTTP) - Web interface for video management (normal mode)
 - **Port 80** (HTTP) - WiFi configuration interface (config mode)
 - **WiFi Hotspot** - Temporary AP for initial setup (`RetroTV` / `RetroTV123`)
+
+### Streaming Considerations
+- **Network required**: Streaming needs active internet connection
+- **Quality**: Automatically limited to 480p for optimal performance
+- **Buffering**: May occur depending on network speed
+- **Duration**: Stream URLs from YouTube expire after 6-12 hours
+- **Local fallback**: System returns to local videos when stream ends
 
 ## 🔧 Troubleshooting
 
@@ -203,3 +259,10 @@ Your retro TV is now ready to play random TV shows! The videos are automatically
 - Check service status: `sudo systemctl status tvplayer.service`
 - Verify Flask dependencies: `pip3 list | grep -i flask`
 - Check network connectivity: `ip addr show`
+
+### Streaming not working
+- Verify yt-dlp is installed: `which yt-dlp`
+- Test yt-dlp manually: `yt-dlp -f "best[height<=480]" -g "https://www.youtube.com/watch?v=VIDEO_ID"`
+- Update yt-dlp: `sudo yt-dlp -U` (if installed via pip) or re-download binary
+- Check if URL is supported: Visit [yt-dlp supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)
+- View streaming logs: `sudo journalctl -u tvplayer.service -f | grep -i stream`

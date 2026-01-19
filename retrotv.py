@@ -707,13 +707,13 @@ def run_config_mode():
     config_script = os.path.join(os.path.dirname(__file__), 'configuration.py')
     subprocess.call(['python3', config_script])
 
-    print("Configuration complete. Release button to reboot...")
+    print("Configuration complete. Press button to reboot...")
 
-    # Wait for button release
-    while GPIO.input(GPIO_PIN) == GPIO.LOW:
+    # Wait for button press
+    while GPIO.input(GPIO_PIN) == GPIO.HIGH:
         time.sleep(0.1)
 
-    print("Button released, rebooting...")
+    print("Button pressed, rebooting...")
     time.sleep(1)  # Brief pause before reboot
 
     # Turn off screen before reboot
@@ -906,7 +906,9 @@ if __name__ == "__main__":
         os.remove(CONFIG_FLAG_FILE)
         normal_operation()
     elif check_config_mode():
-        run_config_mode()
-    else:
+        # Button pressed at startup → Normal mode
         normal_operation()
+    else:
+        # Button NOT pressed at startup → Configuration mode
+        run_config_mode()
 

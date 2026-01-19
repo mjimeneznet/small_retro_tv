@@ -322,14 +322,14 @@ def handle_configure():
     #subprocess.run(["sudo", "reboot"])
     return "", 200
 def monitor_button_for_reboot(display_proc):
-	"""Monitor GPIO button and reboot when released"""
-	print("🔘 Monitoring button... Release to reboot")
+	"""Monitor GPIO button and reboot when pressed"""
+	print("🔘 Monitoring button... Press to reboot")
 	
-	# Wait while button is pressed
-	while GPIO.input(GPIO_PIN) == GPIO.LOW:
+	# Wait for button press
+	while GPIO.input(GPIO_PIN) == GPIO.HIGH:
 		time.sleep(0.1)
 	
-	print("✅ Button released! Rebooting in 2 seconds...")
+	print("✅ Button pressed! Rebooting in 2 seconds...")
 	time.sleep(2)
 	
 	# Cleanup

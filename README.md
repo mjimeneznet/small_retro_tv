@@ -41,12 +41,12 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
 ### 3. Initial Setup
 - SSH into your Raspberry Pi (default credentials):
   ```
-  user: pi
-  password: raspberry
+  user: retrotv
+  password: <your-password>
   ```
 - Run `sudo raspi-config` to:
   - Expand filesystem
-  - Change default password
+  - Change default password (if not set during SD card creation)
   - Set locale/timezone
 - Reboot after changes.
 
@@ -135,10 +135,11 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
   After=network.target
 
   [Service]
-  WorkingDirectory=/home/pi/small_retro_tv/
-  ExecStart=/usr/bin/python3 /home/pi/small_retro_tv/retrotv.py
+  WorkingDirectory=/home/retrotv/small_retro_tv/
+  ExecStart=/usr/bin/python3 /home/retrotv/small_retro_tv/retrotv.py
   Restart=always
-  User=pi
+  User=retrotv
+  Group=retrotv
 
   [Install]
   WantedBy=multi-user.target
@@ -152,9 +153,25 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
 
 ## 🎮 How to Use
 
+### 🔘 Button Behavior
+
+The physical button controls two modes depending on when it's pressed:
+
+**At Startup (when connecting power):**
+- **Button NOT pressed** → Enters **Configuration Mode** (WiFi setup)
+- **Button pressed** → Enters **Normal Mode** (video playback)
+
+**During Normal Mode (after startup):**
+- **Button pressed** → TV screen turns ON and plays videos
+- **Button released** → TV screen turns OFF (Raspberry Pi stays on)
+
 ### Normal Mode (Video Playback)
-1. **Press the button** → TV turns on and starts playing random videos
-2. **Release the button** → TV turns off
+
+**To enter this mode:** Connect power to the Raspberry Pi **WITH the button pressed**.
+
+Once in Normal Mode:
+1. **Press and hold the button** → TV turns on and starts playing random videos
+2. **Release the button** → TV turns off (but continues running in background)
 3. **Access web interface** → Open `http://<raspberry-pi-ip>` in your browser to:
    - **Stream from URL** (YouTube, Vimeo, etc.):
      * Paste any video URL in the blue section
@@ -167,15 +184,20 @@ Follow [the original guide](https://withrow.io/simpsons-tv-build-guide-waveshare
    - **View video list** with size and duration info
 
 ### Configuration Mode (WiFi Setup)
-1. **Hold the button while powering on** the Raspberry Pi
-2. The screen will display:
+
+**To enter this mode:** Connect power to the Raspberry Pi **WITHOUT pressing the button**.
+
+Once in Configuration Mode:
+1. The screen will display:
    - SSID: `RetroTV`
    - Password: `RetroTV123`
    - IP address (usually `10.42.0.1`)
-3. **Connect to the WiFi hotspot** from your phone/laptop
-4. **Open browser** and go to `http://10.42.0.1`
-5. **Configure your WiFi** network
-6. **Release the button** → Raspberry Pi reboots and connects to your WiFi
+2. **Connect to the WiFi hotspot** from your phone/laptop
+3. **Open browser** and go to `http://10.42.0.1`
+4. **Scan and select your WiFi** network
+5. **Enter WiFi password** and submit
+6. **Press the button** → Raspberry Pi reboots and connects to your WiFi
+7. Device will start in Normal Mode on next boot
 
 ## 🎉 Enjoy Your Retro TV!
 Your retro TV is now ready to play random TV shows! The videos are automatically detected and reloaded every 5 seconds when changes are made through the web interface.
